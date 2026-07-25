@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>토닥토닥 식단일기</title>
+    <title>토닥토닥 식단일기 (AI 버전)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
     <style>
@@ -21,6 +21,12 @@
             display: inline-block;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* AI 동작 중 반짝임 효과 */
+        .ai-glow { animation: glow 2s ease-in-out infinite alternate; }
+        @keyframes glow {
+            from { box-shadow: 0 0 5px #5eead4, 0 0 10px #5eead4; }
+            to { box-shadow: 0 0 15px #2dd4bf, 0 0 20px #2dd4bf; }
+        }
     </style>
 </head>
 <body class="min-h-screen text-gray-800 p-4 sm:p-6 flex justify-center">
@@ -30,10 +36,12 @@
         <!-- 상단 헤더 -->
         <header class="bg-teal-100 p-6 rounded-b-3xl shadow-sm z-10 relative flex justify-between items-center">
             <div class="text-left">
-                <h1 class="text-xl font-bold text-teal-800">🌱 토닥토닥 식단일기</h1>
-                <p class="text-sm text-teal-600 mt-1">오늘 하루, 내 몸을 위한 기록</p>
+                <h1 class="text-xl font-bold text-teal-800 flex items-center gap-1">
+                    🌱 토닥토닥 식단일기 <span class="text-xs bg-teal-500 text-white px-2 py-0.5 rounded-full ml-1 ai-glow">AI</span>
+                </h1>
+                <p class="text-sm text-teal-600 mt-1">AI가 분석하는 나의 건강한 하루</p>
             </div>
-            <!-- 추가된 게시판 이동 버튼 -->
+            <!-- 게시판 이동 버튼 -->
             <a href="board.html" class="bg-white text-teal-700 px-3 py-1.5 rounded-full text-sm font-bold shadow hover:bg-teal-50 transition-all">
                 소통 게시판
             </a>
@@ -45,10 +53,10 @@
             <!-- 식단 입력 폼 -->
             <form id="diet-form" class="flex flex-col gap-3">
                 <label for="food-input" class="font-semibold text-gray-700">오늘 어떤 음식을 드셨나요?</label>
-                <textarea id="food-input" rows="3" placeholder="예: 점심으로 현미밥과 단호박을 먹었어요." 
+                <textarea id="food-input" rows="3" placeholder="예: 점심으로 마라탕 먹고 후식으로 달콤한 아이스크림 먹었어 ㅠㅠ" 
                     class="w-full p-4 bg-orange-50 border border-orange-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-300 resize-none transition-all"></textarea>
                 <button type="submit" id="submit-btn" class="bg-teal-400 hover:bg-teal-500 text-white font-bold py-3 rounded-2xl shadow-md transition-all flex justify-center items-center gap-2">
-                    <span>기록하고 분석하기</span>
+                    <span>AI 식단 분석하기</span>
                 </button>
             </form>
 
@@ -73,14 +81,12 @@
         </main>
     </div>
 
-    <!-- ⬇️ 수정된 단일 스크립트 부분 ⬇️ -->
     <script type="module">
-        // 1. 일관된 버전(11.6.1)으로 필요한 모든 기능 불러오기
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 2. 발급받으신 파이어베이스 진짜 통행증(Config)
+        // 기존 파이어베이스 연결 설정 유지
         const firebaseConfig = {
             apiKey: "AIzaSyBlb8UdAy4_uaxMk0XKbyKuC-N7ddRdOG8",
             authDomain: "atomeal1.firebaseapp.com",
@@ -94,7 +100,6 @@
         const appId = 'atopy-diet-app';
         let app, db, auth, currentUserId;
 
-        // 3. 파이어베이스 초기화
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -106,7 +111,6 @@
         const historyList = document.getElementById('history-list');
         const loadingHistory = document.getElementById('loading-history');
 
-        // 4. 인증 로직 (익명 로그인)
         async function authenticateUser() {
             try {
                 await signInAnonymously(auth);
@@ -123,26 +127,6 @@
         });
 
         if(auth) authenticateUser();
-
-        // 5. 주의 성분 키워드 사전
-        const warningKeywords = {
-            "밀가루": ["빵", "라면", "면", "짜장면", "칼국수", "피자", "과자", "케이크", "우동", "스파게티", "파스타", "부침개", "만두", "밀가루"],
-            "단 음식": ["설탕", "초콜릿", "사탕", "아이스크림", "시럽", "케이크", "콜라", "주스", "캔디", "마카롱", "마라탕", "떡볶이", "달고나"],
-            "기름진 음식": ["삼겹살", "치킨", "튀김", "피자", "패스트푸드", "마가린", "버터", "곱창", "족발", "대창", "돈까스", "햄버거"]
-        };
-
-        function analyzeDiet(text) {
-            let detected = [];
-            for (const [category, keywords] of Object.entries(warningKeywords)) {
-                for (const keyword of keywords) {
-                    if (text.includes(keyword)) {
-                        if (!detected.includes(category)) detected.push(category);
-                        break; 
-                    }
-                }
-            }
-            return detected;
-        }
 
         const form = document.getElementById('diet-form');
         const input = document.getElementById('food-input');
@@ -162,44 +146,46 @@
             }
 
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="loader"></span> 분석 및 저장 중...';
-
-            const detectedCategories = analyzeDiet(text);
-            
-            let resultType = 'success';
-            let resultTitle = '✨ 훌륭해요!';
-            let resultMsg = '자극적인 성분 없이 건강한 식단을 드셨네요! 피부도 한결 편안해할 거예요.';
-
-            if (detectedCategories.length > 0) {
-                resultType = 'warning';
-                resultTitle = '⚠️ 주의가 필요해요';
-                const categoriesStr = detectedCategories.join(', ');
-                resultMsg = `오늘 식단에 <b>[${categoriesStr}]</b> 성분이 포함되어 있어요. 가려움이 심해질 수 있으니 따뜻한 물을 많이 드시고 푹 쉬어주세요!`;
-            }
+            submitBtn.innerHTML = '<span class="loader"></span> AI가 생각하는 중...';
+            feedbackBox.classList.add('hidden'); 
 
             try {
+                // 1. Vercel 서버리스 함수로 텍스트 전송 (API 호출)
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (!response.ok) throw new Error('API 서버 에러');
+
+                const aiResult = await response.json();
+                
+                // 2. 파이어베이스에 저장
                 const dietsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'diets');
                 await addDoc(dietsRef, {
                     text: text,
-                    detected: detectedCategories,
+                    detected: aiResult.detected, 
                     createdAt: serverTimestamp()
                 });
                 
-                showFeedback(resultTitle, resultMsg, resultType);
+                // 3. 화면에 피드백 표시
+                const isWarning = aiResult.detected.length > 0;
+                showFeedback(aiResult.title, aiResult.message, isWarning ? 'warning' : 'success');
                 input.value = ''; 
 
             } catch (error) {
-                console.error("저장 실패:", error);
-                showFeedback("오류 발생", "데이터를 저장하지 못했습니다. (데이터베이스 권한을 확인해주세요)", "warning");
+                console.error("분석 실패:", error);
+                showFeedback("오류 발생", "AI 분석을 완료하지 못했습니다. 새로고침 후 다시 시도해주세요.", "warning");
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = '<span>기록하고 분석하기</span>';
+                submitBtn.innerHTML = '<span>AI 식단 분석하기</span>';
             }
         });
 
         function showFeedback(title, message, type) {
             feedbackTitle.innerText = title;
-            feedbackMessage.innerHTML = message; 
+            feedbackMessage.innerText = message; 
             
             feedbackBox.classList.remove('hidden');
             void feedbackBox.offsetWidth; 
@@ -247,7 +233,7 @@
                     
                     let tagsHtml = '';
                     if (record.detected && record.detected.length > 0) {
-                        tagsHtml = `<div class="mt-2 flex gap-1">` + 
+                        tagsHtml = `<div class="mt-2 flex gap-1 flex-wrap">` + 
                             record.detected.map(cat => `<span class="bg-rose-100 text-rose-700 text-xs px-2 py-1 rounded-full">${cat}</span>`).join('') +
                         `</div>`;
                     } else {
@@ -263,10 +249,6 @@
                     `;
                     historyList.appendChild(li);
                 });
-            }, (error) => {
-                console.error("기록 불러오기 실패:", error);
-                loadingHistory.classList.add('hidden');
-                historyList.innerHTML = '<p class="text-sm text-red-400 text-center py-4">기록을 불러오지 못했습니다.</p>';
             });
         }
     </script>
