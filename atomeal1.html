@@ -9,12 +9,11 @@
     <style>
         body {
             font-family: 'Gowun Dodum', sans-serif;
-            background-color: #fdf6e3; /* 부드러운 파스텔 베이지 바탕 */
+            background-color: #fdf6e3;
         }
-        /* 로딩 스피너 애니메이션 */
         .loader {
             border: 3px solid #f3f3f3;
-            border-top: 3px solid #5eead4; /* teal-300 */
+            border-top: 3px solid #5eead4;
             border-radius: 50%;
             width: 20px;
             height: 20px;
@@ -33,13 +32,13 @@
             <p class="text-sm text-teal-600 mt-2">오늘 하루, 내 몸을 위한 기록</p>
         </header>
 
-        <!-- 메인 콘텐츠 영역 (스크롤) -->
+        <!-- 메인 콘텐츠 영역 -->
         <main class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
             
             <!-- 식단 입력 폼 -->
             <form id="diet-form" class="flex flex-col gap-3">
                 <label for="food-input" class="font-semibold text-gray-700">오늘 어떤 음식을 드셨나요?</label>
-                <textarea id="food-input" rows="3" placeholder="예: 점심으로 쌀국수와 샐러드를 먹었어요." 
+                <textarea id="food-input" rows="3" placeholder="예: 점심으로 현미밥과 단호박을 먹었어요." 
                     class="w-full p-4 bg-orange-50 border border-orange-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-300 resize-none transition-all"></textarea>
                 <button type="submit" id="submit-btn" class="bg-teal-400 hover:bg-teal-500 text-white font-bold py-3 rounded-2xl shadow-md transition-all flex justify-center items-center gap-2">
                     <span>기록하고 분석하기</span>
@@ -61,34 +60,34 @@
                     <span id="loading-history" class="loader hidden"></span>
                 </h2>
                 <ul id="history-list" class="flex flex-col gap-3 pb-6">
-                    <!-- 기록이 여기에 추가됩니다 -->
                     <p class="text-sm text-gray-400 text-center py-4">아직 기록이 없어요. 첫 식단을 입력해보세요!</p>
                 </ul>
             </div>
         </main>
     </div>
 
+    <!-- ⬇️ 수정된 단일 스크립트 부분 ⬇️ -->
     <script type="module">
+        // 1. 일관된 버전(11.6.1)으로 필요한 모든 기능 불러오기
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // 환경에 따른 파이어베이스 설정
-        // 깃허브/버셀에 올릴 때는 아래 __firebase_config 부분을 본인의 Firebase Config 객체로 교체하세요.
-        let firebaseConfig;
-        if (typeof __firebase_config !== 'undefined') {
-            firebaseConfig = JSON.parse(__firebase_config);
-        } else {
-            // [TODO: 버셀 배포 전 여기에 본인의 파이어베이스 설정을 붙여넣으세요]
-            firebaseConfig = {
-                /* apiKey: "YOUR_API_KEY",
-                   authDomain: "YOUR_PROJECT.firebaseapp.com", ... */
-            };
-        }
+        // 2. 발급받으신 파이어베이스 진짜 통행증(Config)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBlb8UdAy4_uaxMk0XKbyKuC-N7ddRdOG8",
+            authDomain: "atomeal1.firebaseapp.com",
+            projectId: "atomeal1",
+            storageBucket: "atomeal1.firebasestorage.app",
+            messagingSenderId: "348105437958",
+            appId: "1:348105437958:web:6b47abcf642a50c4416487",
+            measurementId: "G-HNZYQHZT3L"
+        };
 
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'atopy-diet-app';
+        const appId = 'atopy-diet-app';
         let app, db, auth, currentUserId;
 
+        // 3. 파이어베이스 초기화
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
@@ -100,14 +99,10 @@
         const historyList = document.getElementById('history-list');
         const loadingHistory = document.getElementById('loading-history');
 
-        // 인증 로직
+        // 4. 인증 로직 (익명 로그인)
         async function authenticateUser() {
             try {
-                if (typeof __initial_auth_token !== 'undefined') {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                await signInAnonymously(auth);
             } catch (error) {
                 console.error("인증 실패:", error);
             }
@@ -116,29 +111,26 @@
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUserId = user.uid;
-                loadHistory(); // 유저 확인 후 기록 불러오기
+                loadHistory(); 
             }
         });
 
-        // 앱 시작 시 인증 실행
         if(auth) authenticateUser();
 
-
-        // 주의 성분 키워드 사전
+        // 5. 주의 성분 키워드 사전
         const warningKeywords = {
             "밀가루": ["빵", "라면", "면", "짜장면", "칼국수", "피자", "과자", "케이크", "우동", "스파게티", "파스타", "부침개", "만두", "밀가루"],
             "단 음식": ["설탕", "초콜릿", "사탕", "아이스크림", "시럽", "케이크", "콜라", "주스", "캔디", "마카롱", "마라탕", "떡볶이", "달고나"],
             "기름진 음식": ["삼겹살", "치킨", "튀김", "피자", "패스트푸드", "마가린", "버터", "곱창", "족발", "대창", "돈까스", "햄버거"]
         };
 
-        // 식단 분석 함수
         function analyzeDiet(text) {
             let detected = [];
             for (const [category, keywords] of Object.entries(warningKeywords)) {
                 for (const keyword of keywords) {
                     if (text.includes(keyword)) {
                         if (!detected.includes(category)) detected.push(category);
-                        break; // 카테고리당 하나만 검출되면 통과
+                        break; 
                     }
                 }
             }
@@ -162,11 +154,9 @@
                 return;
             }
 
-            // UI 상태 변경
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="loader"></span> 분석 및 저장 중...';
 
-            // 1. 알고리즘 분석
             const detectedCategories = analyzeDiet(text);
             
             let resultType = 'success';
@@ -180,9 +170,7 @@
                 resultMsg = `오늘 식단에 <b>[${categoriesStr}]</b> 성분이 포함되어 있어요. 가려움이 심해질 수 있으니 따뜻한 물을 많이 드시고 푹 쉬어주세요!`;
             }
 
-            // 2. 파이어베이스 저장 (Firestore)
             try {
-                // Rule: artifacts/{appId}/users/{userId}/{collectionName}
                 const dietsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'diets');
                 await addDoc(dietsRef, {
                     text: text,
@@ -190,13 +178,12 @@
                     createdAt: serverTimestamp()
                 });
                 
-                // 3. 분석 결과 화면에 띄우기
                 showFeedback(resultTitle, resultMsg, resultType);
-                input.value = ''; // 입력창 초기화
+                input.value = ''; 
 
             } catch (error) {
                 console.error("저장 실패:", error);
-                showFeedback("오류 발생", "데이터를 저장하지 못했습니다.", "warning");
+                showFeedback("오류 발생", "데이터를 저장하지 못했습니다. (데이터베이스 권한을 확인해주세요)", "warning");
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<span>기록하고 분석하기</span>';
@@ -205,11 +192,10 @@
 
         function showFeedback(title, message, type) {
             feedbackTitle.innerText = title;
-            feedbackMessage.innerHTML = message; // b 태그 적용을 위해 innerHTML 사용
+            feedbackMessage.innerHTML = message; 
             
             feedbackBox.classList.remove('hidden');
-            // 강제 리플로우
-            void feedbackBox.offsetWidth;
+            void feedbackBox.offsetWidth; 
             
             if (type === 'warning') {
                 feedbackBox.className = 'rounded-2xl p-5 shadow-sm transform transition-all duration-300 bg-rose-50 border border-rose-100 text-rose-800 scale-100 opacity-100 mb-4';
@@ -223,7 +209,6 @@
             loadingHistory.classList.remove('hidden');
 
             const dietsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'diets');
-            // 주의: 복합 쿼리(orderBy 등) 사용 시 인덱스 에러 방지를 위해 단순 쿼리 후 클라이언트 정렬
             const q = query(dietsRef);
 
             onSnapshot(q, (snapshot) => {
@@ -239,7 +224,6 @@
                     records.push({ id: doc.id, ...doc.data() });
                 });
 
-                // 최신순 정렬 (클라이언트 단 처리)
                 records.sort((a, b) => {
                     const timeA = a.createdAt ? a.createdAt.toMillis() : Date.now();
                     const timeB = b.createdAt ? b.createdAt.toMillis() : Date.now();
@@ -272,7 +256,6 @@
                     `;
                     historyList.appendChild(li);
                 });
-
             }, (error) => {
                 console.error("기록 불러오기 실패:", error);
                 loadingHistory.classList.add('hidden');
