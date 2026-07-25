@@ -71,7 +71,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ⚠️ 여기에 본인의 firebaseConfig를 꼭 붙여넣으세요! (index.html에 있는 것과 동일)
@@ -83,17 +83,15 @@
             messagingSenderId: "348105437958",
             appId: "1:348105437958:web:6b47abcf642a50c4416487",
             measurementId: "G-HNZYQHZT3L"
-         };
-      
-
+        };
+        
         const appId = 'atopy-diet-app';
-        let app, db, auth;
+        let app, db, auth, currentUserId;
 
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
-            signInAnonymously(auth); // 게시판도 익명 인증 사용
         } catch (e) {
             console.error("Firebase 초기화 에러:", e);
         }
@@ -105,10 +103,29 @@
         const messageInput = document.getElementById('message-input');
         const submitBtn = document.getElementById('submit-btn');
 
+        // 인증 로직 (익명 로그인 후 게시판 로드)
+        async function authenticateUser() {
+            try {
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("인증 실패:", error);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                loadBoard(); // 인증이 완료된 후 데이터 불러오기 실행
+            }
+        });
+
+        if(auth) authenticateUser();
+
         // 게시판 데이터 불러오기 (실시간)
         function loadBoard() {
+            if (!currentUserId) return;
             loadingBoard.classList.remove('hidden');
-            // 모두가 함께 보는 공간이므로 users 안쪽이 아닌, 별도의 'public_board' 서랍장을 씁니다.
+            
             const boardRef = collection(db, 'artifacts', appId, 'public_board');
             const q = query(boardRef);
 
@@ -152,8 +169,6 @@
             });
         }
 
-        loadBoard();
-
         // 게시글 등록하기
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -169,7 +184,8 @@
                 await addDoc(boardRef, {
                     nickname: nickname,
                     message: message,
-                    createdAt: serverTimestamp()
+                    createdAt: serverTimestamp(),
+                    userId: currentUserId // 누가 작성했는지 알 수 있도록 유저 ID도 함께 저장
                 });
                 messageInput.value = ''; // 내용만 비우고 닉네임은 유지
             } catch (error) {
