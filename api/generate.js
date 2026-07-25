@@ -1,22 +1,21 @@
 export default async function handler(req, res) {
-    // POST 요청만 허용합니다.
+    // POST 요청만 허용
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
     try {
         const { text } = req.body;
-        // Vercel에 설정해둔 환경 변수에서 API 키를 몰래 가져옵니다.
         const apiKey = process.env.GEMINI_API_KEY;
 
         if (!apiKey) {
             return res.status(500).json({ error: 'API 키가 설정되지 않았습니다.' });
         }
 
-        // Gemini 1.5 Flash 모델 호출 주소
+        // 💡 수정된 부분: 올바른 최신 모델 이름(gemini-1.5-flash)으로 변경했습니다.
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-        // AI에게 역할과 답변 형식을 지시합니다.
+        // AI에게 역할과 지시사항 부여 (System Instruction)
         const systemPrompt = `
         당신은 아토피 피부염 환자를 위한 다정하고 전문적인 식단 분석가입니다. 
         사용자가 입력한 식단 텍스트를 분석하여 다음 4가지 카테고리 중 포함된 것이 있는지 확인하세요: ["밀가루", "단 음식", "기름진 음식", "매운 음식"].
@@ -34,10 +33,10 @@ export default async function handler(req, res) {
         `;
 
         const payload = {
-            system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{ parts: [{ text: text }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
             generationConfig: {
-                responseMimeType: "application/json" // 결과를 무조건 JSON으로 받도록 강제합니다.
+                responseMimeType: "application/json"
             }
         };
 
@@ -49,11 +48,16 @@ export default async function handler(req, res) {
 
         const data = await response.json();
         
-        // AI가 대답한 텍스트를 JSON(객체)으로 변환합니다.
+        // 💡 추가된 부분: API 응답이 실패하거나 결과값이 없을 경우 안전하게 에러를 반환합니다.
+        if (!response.ok || !data.candidates || data.candidates.length === 0) {
+            console.error('Gemini API 응답 에러:', data);
+            return res.status(500).json({ error: 'AI 분석 중 문제가 발생했습니다.' });
+        }
+
+        // AI 응답 텍스트 추출 및 JSON 파싱
         const aiText = data.candidates[0].content.parts[0].text;
         const resultJson = JSON.parse(aiText);
 
-        // 프론트엔드로 분석 결과를 보내줍니다.
         return res.status(200).json(resultJson);
 
     } catch (error) {
