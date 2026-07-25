@@ -5,16 +5,14 @@ export default async function handler(req, res) {
 
     try {
         const { text } = req.body;
-        
-        // 앞뒤 공백이 실수로 들어갔을 경우를 대비해 공백 제거(trim) 안전장치 추가
         const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
         if (!apiKey) {
             return res.status(500).json({ error: 'API 키가 설정되지 않았습니다.' });
         }
 
-        // 가장 안정적인 v1 정식 버전과 gemini-1.5-flash 모델 사용
-        const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // 💡 수정된 부분: v1beta 버전과 가장 범용적인 gemini-pro 모델의 완벽한 조합
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
 
         const prompt = `
         당신은 아토피 피부염 환자를 위한 다정하고 전문적인 식단 분석가입니다. 
@@ -47,12 +45,10 @@ export default async function handler(req, res) {
         
         if (!response.ok || !data.candidates || data.candidates.length === 0) {
             console.error('Gemini API 응답 에러 상세:', JSON.stringify(data));
-            return res.status(500).json({ error: 'AI 서버가 응답을 거부했습니다. (API 키 권한 또는 모델 문제)' });
+            return res.status(500).json({ error: 'AI 서버 응답 오류' });
         }
 
         let aiText = data.candidates[0].content.parts[0].text;
-        
-        // AI가 마크다운 텍스트를 붙여서 보낼 경우를 대비한 정제 작업
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         
         const resultJson = JSON.parse(aiText);
@@ -60,6 +56,6 @@ export default async function handler(req, res) {
 
     } catch (error) {
         console.error('API 호출/파싱 에러:', error);
-        return res.status(500).json({ error: '식단 분석 중 예상치 못한 오류가 발생했습니다.' });
+        return res.status(500).json({ error: '식단 분석 중 오류가 발생했습니다.' });
     }
 }
