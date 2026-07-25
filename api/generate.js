@@ -13,7 +13,7 @@ export default async function handler(req, res) {
         }
 
         // 💡 수정된 부분: 올바른 최신 모델 이름(gemini-1.5-flash)으로 변경했습니다.
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
         // AI에게 역할과 지시사항 부여 (System Instruction)
         const systemPrompt = `
