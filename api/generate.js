@@ -11,9 +11,6 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'API 키가 설정되지 않았습니다.' });
         }
 
-        // 💡 수정된 부분: v1beta 버전과 가장 범용적인 gemini-pro 모델의 완벽한 조합
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
-
         const prompt = `
         당신은 아토피 피부염 환자를 위한 다정하고 전문적인 식단 분석가입니다. 
         다음 사용자의 식단 텍스트를 분석하여 카테고리 ["밀가루", "단 음식", "기름진 음식", "매운 음식"] 중 포함된 것이 있는지 확인하세요.
@@ -35,20 +32,38 @@ export default async function handler(req, res) {
             contents: [{ parts: [{ text: prompt }] }]
         };
 
-        const response = await fetch(apiUrl, {
+        // 1. 최신 표준 모델(gemini-1.5-flash)로 먼저 시도합니다.
+        let apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        
+        let response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
+        // 2. 만약 구글 서버에서 모델을 찾을 수 없다며 404 에러를 낼 경우,
+        // 즉시 가장 안정적인 구버전(gemini-1.0-pro)으로 자동 재시도합니다.
+        if (response.status === 404) {
+            console.log('1.5-flash 모델을 찾을 수 없어 1.0-pro 모델로 우회하여 재시도합니다.');
+            apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.0-pro:generateContent?key=${apiKey}`;
+            
+            response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        }
+
         const data = await response.json();
         
         if (!response.ok || !data.candidates || data.candidates.length === 0) {
-            console.error('Gemini API 응답 에러 상세:', JSON.stringify(data));
+            console.error('Gemini API 최종 응답 에러 상세:', JSON.stringify(data));
             return res.status(500).json({ error: 'AI 서버 응답 오류' });
         }
 
         let aiText = data.candidates[0].content.parts[0].text;
+        
+        // AI가 간혹 불필요한 마크다운 기호를 붙이는 것을 방지
         aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         
         const resultJson = JSON.parse(aiText);
