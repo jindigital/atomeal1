@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>토닥토닥 식단일기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Gowun Dodum', sans-serif;
+            background-color: #fdf6e3; /* 부드러운 파스텔 베이지 바탕 */
+        }
+        /* 로딩 스피너 애니메이션 */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #5eead4; /* teal-300 */
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen text-gray-800 p-4 sm:p-6 flex justify-center">
+    
+    <div class="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[90vh]">
+        <!-- 상단 헤더 -->
+        <header class="bg-teal-100 p-6 text-center rounded-b-3xl shadow-sm z-10 relative">
+            <h1 class="text-2xl font-bold text-teal-800">🌱 토닥토닥 식단일기</h1>
+            <p class="text-sm text-teal-600 mt-2">오늘 하루, 내 몸을 위한 기록</p>
+        </header>
+
+        <!-- 메인 콘텐츠 영역 (스크롤) -->
+        <main class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+            
+            <!-- 식단 입력 폼 -->
+            <form id="diet-form" class="flex flex-col gap-3">
+                <label for="food-input" class="font-semibold text-gray-700">오늘 어떤 음식을 드셨나요?</label>
+                <textarea id="food-input" rows="3" placeholder="예: 점심으로 쌀국수와 샐러드를 먹었어요." 
+                    class="w-full p-4 bg-orange-50 border border-orange-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-teal-300 resize-none transition-all"></textarea>
+                <button type="submit" id="submit-btn" class="bg-teal-400 hover:bg-teal-500 text-white font-bold py-3 rounded-2xl shadow-md transition-all flex justify-center items-center gap-2">
+                    <span>기록하고 분석하기</span>
+                </button>
+            </form>
+
+            <!-- 피드백(출력창) 영역 -->
+            <div id="feedback-box" class="hidden rounded-2xl p-5 shadow-sm transform transition-all duration-300 scale-95 opacity-0">
+                <h3 id="feedback-title" class="font-bold text-lg mb-2"></h3>
+                <p id="feedback-message" class="text-sm leading-relaxed"></p>
+            </div>
+
+            <hr class="border-gray-100">
+
+            <!-- 이전 기록 리스트 -->
+            <div class="flex flex-col gap-3">
+                <h2 class="font-bold text-gray-700 flex items-center gap-2">
+                    📖 나의 기록
+                    <span id="loading-history" class="loader hidden"></span>
+                </h2>
+                <ul id="history-list" class="flex flex-col gap-3 pb-6">
+                    <!-- 기록이 여기에 추가됩니다 -->
+                    <p class="text-sm text-gray-400 text-center py-4">아직 기록이 없어요. 첫 식단을 입력해보세요!</p>
+                </ul>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 환경에 따른 파이어베이스 설정
+        // 깃허브/버셀에 올릴 때는 아래 __firebase_config 부분을 본인의 Firebase Config 객체로 교체하세요.
+        let firebaseConfig;
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfig = JSON.parse(__firebase_config);
+        } else {
+            // [TODO: 버셀 배포 전 여기에 본인의 파이어베이스 설정을 붙여넣으세요]
+            firebaseConfig = {
+                /* apiKey: "YOUR_API_KEY",
+                   authDomain: "YOUR_PROJECT.firebaseapp.com", ... */
+            };
+        }
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'atopy-diet-app';
+        let app, db, auth, currentUserId;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+        } catch (e) {
+            console.error("Firebase 초기화 에러:", e);
+        }
+
+        const historyList = document.getElementById('history-list');
+        const loadingHistory = document.getElementById('loading-history');
+
+        // 인증 로직
+        async function authenticateUser() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("인증 실패:", error);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                loadHistory(); // 유저 확인 후 기록 불러오기
+            }
+        });
+
+        // 앱 시작 시 인증 실행
+        if(auth) authenticateUser();
+
+
+        // 주의 성분 키워드 사전
+        const warningKeywords = {
+            "밀가루": ["빵", "라면", "면", "짜장면", "칼국수", "피자", "과자", "케이크", "우동", "스파게티", "파스타", "부침개", "만두", "밀가루"],
+            "단 음식": ["설탕", "초콜릿", "사탕", "아이스크림", "시럽", "케이크", "콜라", "주스", "캔디", "마카롱", "마라탕", "떡볶이", "달고나"],
+            "기름진 음식": ["삼겹살", "치킨", "튀김", "피자", "패스트푸드", "마가린", "버터", "곱창", "족발", "대창", "돈까스", "햄버거"]
+        };
+
+        // 식단 분석 함수
+        function analyzeDiet(text) {
+            let detected = [];
+            for (const [category, keywords] of Object.entries(warningKeywords)) {
+                for (const keyword of keywords) {
+                    if (text.includes(keyword)) {
+                        if (!detected.includes(category)) detected.push(category);
+                        break; // 카테고리당 하나만 검출되면 통과
+                    }
+                }
+            }
+            return detected;
+        }
+
+        const form = document.getElementById('diet-form');
+        const input = document.getElementById('food-input');
+        const submitBtn = document.getElementById('submit-btn');
+        const feedbackBox = document.getElementById('feedback-box');
+        const feedbackTitle = document.getElementById('feedback-title');
+        const feedbackMessage = document.getElementById('feedback-message');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            if (!text) return;
+            
+            if (!currentUserId) {
+                showFeedback("연결 중...", "서버와 연결 중입니다. 잠시 후 다시 시도해주세요.", "warning");
+                return;
+            }
+
+            // UI 상태 변경
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loader"></span> 분석 및 저장 중...';
+
+            // 1. 알고리즘 분석
+            const detectedCategories = analyzeDiet(text);
+            
+            let resultType = 'success';
+            let resultTitle = '✨ 훌륭해요!';
+            let resultMsg = '자극적인 성분 없이 건강한 식단을 드셨네요! 피부도 한결 편안해할 거예요.';
+
+            if (detectedCategories.length > 0) {
+                resultType = 'warning';
+                resultTitle = '⚠️ 주의가 필요해요';
+                const categoriesStr = detectedCategories.join(', ');
+                resultMsg = `오늘 식단에 <b>[${categoriesStr}]</b> 성분이 포함되어 있어요. 가려움이 심해질 수 있으니 따뜻한 물을 많이 드시고 푹 쉬어주세요!`;
+            }
+
+            // 2. 파이어베이스 저장 (Firestore)
+            try {
+                // Rule: artifacts/{appId}/users/{userId}/{collectionName}
+                const dietsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'diets');
+                await addDoc(dietsRef, {
+                    text: text,
+                    detected: detectedCategories,
+                    createdAt: serverTimestamp()
+                });
+                
+                // 3. 분석 결과 화면에 띄우기
+                showFeedback(resultTitle, resultMsg, resultType);
+                input.value = ''; // 입력창 초기화
+
+            } catch (error) {
+                console.error("저장 실패:", error);
+                showFeedback("오류 발생", "데이터를 저장하지 못했습니다.", "warning");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<span>기록하고 분석하기</span>';
+            }
+        });
+
+        function showFeedback(title, message, type) {
+            feedbackTitle.innerText = title;
+            feedbackMessage.innerHTML = message; // b 태그 적용을 위해 innerHTML 사용
+            
+            feedbackBox.classList.remove('hidden');
+            // 강제 리플로우
+            void feedbackBox.offsetWidth;
+            
+            if (type === 'warning') {
+                feedbackBox.className = 'rounded-2xl p-5 shadow-sm transform transition-all duration-300 bg-rose-50 border border-rose-100 text-rose-800 scale-100 opacity-100 mb-4';
+            } else {
+                feedbackBox.className = 'rounded-2xl p-5 shadow-sm transform transition-all duration-300 bg-teal-50 border border-teal-100 text-teal-800 scale-100 opacity-100 mb-4';
+            }
+        }
+
+        function loadHistory() {
+            if (!currentUserId) return;
+            loadingHistory.classList.remove('hidden');
+
+            const dietsRef = collection(db, 'artifacts', appId, 'users', currentUserId, 'diets');
+            // 주의: 복합 쿼리(orderBy 등) 사용 시 인덱스 에러 방지를 위해 단순 쿼리 후 클라이언트 정렬
+            const q = query(dietsRef);
+
+            onSnapshot(q, (snapshot) => {
+                loadingHistory.classList.add('hidden');
+                
+                if (snapshot.empty) {
+                    historyList.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">아직 기록이 없어요. 첫 식단을 입력해보세요!</p>';
+                    return;
+                }
+
+                let records = [];
+                snapshot.forEach(doc => {
+                    records.push({ id: doc.id, ...doc.data() });
+                });
+
+                // 최신순 정렬 (클라이언트 단 처리)
+                records.sort((a, b) => {
+                    const timeA = a.createdAt ? a.createdAt.toMillis() : Date.now();
+                    const timeB = b.createdAt ? b.createdAt.toMillis() : Date.now();
+                    return timeB - timeA;
+                });
+
+                historyList.innerHTML = '';
+                records.forEach(record => {
+                    const dateObj = record.createdAt ? record.createdAt.toDate() : new Date();
+                    const dateStr = `${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours()}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+                    
+                    const li = document.createElement('li');
+                    li.className = 'bg-gray-50 rounded-2xl p-4 shadow-sm border border-gray-100';
+                    
+                    let tagsHtml = '';
+                    if (record.detected && record.detected.length > 0) {
+                        tagsHtml = `<div class="mt-2 flex gap-1">` + 
+                            record.detected.map(cat => `<span class="bg-rose-100 text-rose-700 text-xs px-2 py-1 rounded-full">${cat}</span>`).join('') +
+                        `</div>`;
+                    } else {
+                        tagsHtml = `<div class="mt-2"><span class="bg-teal-100 text-teal-700 text-xs px-2 py-1 rounded-full">건강식✨</span></div>`;
+                    }
+
+                    li.innerHTML = `
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-xs text-gray-400">${dateStr}</span>
+                        </div>
+                        <p class="text-sm text-gray-700">${record.text}</p>
+                        ${tagsHtml}
+                    `;
+                    historyList.appendChild(li);
+                });
+
+            }, (error) => {
+                console.error("기록 불러오기 실패:", error);
+                loadingHistory.classList.add('hidden');
+                historyList.innerHTML = '<p class="text-sm text-red-400 text-center py-4">기록을 불러오지 못했습니다.</p>';
+            });
+        }
+    </script>
+</body>
+</html>
