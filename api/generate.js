@@ -11,8 +11,8 @@ export default async function handler(req, res) {
             return res.status(500).json({ error: 'API 키가 설정되지 않았습니다.' });
         }
 
-        // 💡 핵심 해결: 선생님의 API 목록에 정확히 존재하는 'gemini-2.5-flash' 모델로 변경!
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        // 💡 핵심 해결: 신규 사용자도 무조건 접근 가능한 최신 자동 연결 모델로 변경!
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
 
         const prompt = `
         당신은 아토피 피부염 환자를 위한 다정하고 전문적인 식단 분석가입니다. 
